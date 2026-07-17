@@ -65,6 +65,7 @@ describe('parseFixtureUtterance', () => {
   })
 
   it.each([
+    ['there is 1 8ft fixture', 1, '8 ft'],
     ['18 foot fixture', 1, '8 ft'],
     ['2 8-foot fixtures', 2, '8 ft'],
     ['32 4ft fixtures', 32, '4 ft'],
