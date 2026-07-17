@@ -6,8 +6,9 @@ const fixturePatterns: Array<[RegExp, string]> = [
   [/\bwall[\s-]?packs?\b/i, 'Wall Pack'],
   [/\b(?:can|recessed)\s+lights?\b/i, 'Can Light'],
   [/\b(?:parking\s+lot\s+)?(?:poles?|pole\s+lights?)\b/i, 'Parking Lot Pole'],
-  [/\bstrip\s+(?:lights?|fixtures?)\b/i, 'Strip Light'],
-  [/\b(?:linear|wraparound)\s+(?:fixtures?|lights?)\b/i, 'Linear Fixture'],
+  [/\bstrips?(?:\s+(?:lights?|fixtures?))?\b/i, 'Strip'],
+  [/\b(?:wrap|wraparound)(?:\s+(?:fixtures?|lights?))?\b/i, 'Wrap'],
+  [/\blinear\s+(?:fixtures?|lights?)\b/i, 'Linear Fixture'],
   [/\bflood\s*lights?\b/i, 'Flood Light'],
   [/\bexit\s+signs?\b/i, 'Exit Sign'],
   [/\bemergency\s+lights?\b/i, 'Emergency Light'],
@@ -26,9 +27,15 @@ const technologyPatterns: Array<[RegExp, string]> = [
   [/\bincandescents?\b/i, 'Incandescent'],
 ]
 
+const mountingPatterns: Array<[RegExp, string]> = [
+  [/\bsurface(?:\s+mount(?:ed)?)?\b/i, 'Surface'],
+  [/\bpendant(?:\s+mount(?:ed)?)?\b/i, 'Pendant'],
+  [/\brecessed(?:\s+mount(?:ed)?)?\b/i, 'Recessed'],
+]
+
 const scopedLocationMarker = /\ball (?:of )?(?:the )?following lights? (?:are|will be|are located) (?:in|at) (?:the )?(.+?)(?=\s*[:,.]|\s+\d+\b|$)/i
-const locationMarker = /\b(?:in|at|inside|outside|exterior|on)\s+(?:the\s+)?(.+?)(?=\s+(?:with|note|notes|that|and note)\b|$)/i
-const notesMarker = /\b(?:with|note|notes|and note)\s+(.+)$/i
+const locationMarker = /\b(?:in|at|inside|outside|exterior|on)\s+(?:the\s+)?(.+?)(?=\s+(?:with|comment|comments|note|notes|that|and note)\b|$)/i
+const notesMarker = /\b(?:with|comments?|notes?|and note|that\s+(?:has|have|is|are))\s*(?::|that)?\s+(.+)$/i
 
 function titleCase(value: string) {
   return value
@@ -57,7 +64,7 @@ function lastNumber(text: string): number | null {
 function parseFixtureSpecification(text: string) {
   const continuationQuantity = parseContinuationQuantity(text)
   if (continuationQuantity !== null) {
-    return { quantity: continuationQuantity, fixtureSize: '', lampCount: null }
+    return { quantity: continuationQuantity, fixtureSize: '', fixtureWidth: null, fixtureLength: null, lampCount: null }
   }
 
   // A fixture specification such as “10, 1 by 8 by 4-lamp fixtures”.
@@ -68,6 +75,8 @@ function parseFixtureSpecification(text: string) {
     return {
       quantity,
       fixtureSize: `${Number(sizeAndLamps[1])}x${Number(sizeAndLamps[2])}`,
+      fixtureWidth: Number(sizeAndLamps[1]),
+      fixtureLength: Number(sizeAndLamps[2]),
       lampCount: Number(sizeAndLamps[3]),
     }
   }
@@ -80,6 +89,8 @@ function parseFixtureSpecification(text: string) {
     return {
       quantity,
       fixtureSize: `${Number(rectangularSize[1])}x${Number(rectangularSize[2])}`,
+      fixtureWidth: Number(rectangularSize[1]),
+      fixtureLength: Number(rectangularSize[2]),
       lampCount: explicitLampCount ? Number(explicitLampCount[1]) : null,
     }
   }
@@ -112,6 +123,8 @@ function parseFixtureSpecification(text: string) {
     return {
       quantity,
       fixtureSize: `${feet} ft`,
+      fixtureWidth: 1,
+      fixtureLength: feet,
       lampCount: explicitLampCount ? Number(explicitLampCount[1]) : null,
     }
   }
@@ -123,8 +136,23 @@ function parseFixtureSpecification(text: string) {
   return {
     quantity: (quantityMatch ? Number(quantityMatch[1]) : 1) + additions,
     fixtureSize: '',
+    fixtureWidth: null,
+    fixtureLength: null,
     lampCount: explicitLampCount ? Number(explicitLampCount[1]) : null,
   }
+}
+
+export function formatFixtureName(entry: Pick<FixtureEntry, 'fixtureWidth' | 'fixtureLength' | 'lampCount' | 'technology' | 'fixtureType'>): string {
+  const lampType = entry.technology !== 'Unknown' ? ` ${entry.technology}` : ''
+  if (entry.fixtureLength !== null) {
+    const dimensions = `${entry.fixtureWidth ?? 1}x${entry.fixtureLength}`
+    const lamps = entry.lampCount !== null ? `x${entry.lampCount}-lamp` : ''
+    return `${dimensions}${lamps}${lampType}`.trim()
+  }
+
+  const fixtureType = entry.fixtureType !== 'Other' ? entry.fixtureType : 'Unclassified fixture'
+  const lamps = entry.lampCount !== null ? ` ${entry.lampCount}-lamp` : ''
+  return `${fixtureType}${lamps}${lampType}`.trim()
 }
 
 export function parseFixtureUtterance(rawText: string): Omit<FixtureEntry, 'id' | 'createdAt'> {
@@ -132,6 +160,7 @@ export function parseFixtureUtterance(rawText: string): Omit<FixtureEntry, 'id' 
   const specification = parseFixtureSpecification(text)
   const fixture = fixturePatterns.find(([pattern]) => pattern.test(text))
   const technology = technologyPatterns.find(([pattern]) => pattern.test(text))
+  const mounting = mountingPatterns.find(([pattern]) => pattern.test(text))
   const locationMatch = text.match(scopedLocationMarker) ?? text.match(locationMarker)
   const noteMatch = text.match(notesMarker)
 
@@ -140,14 +169,18 @@ export function parseFixtureUtterance(rawText: string): Omit<FixtureEntry, 'id' 
     location = `Exterior ${location}`
   }
 
-  return {
+  const parsed = {
     quantity: Math.max(1, specification.quantity),
     fixtureType: fixture?.[1] ?? 'Other',
     fixtureSize: specification.fixtureSize,
+    fixtureWidth: specification.fixtureWidth,
+    fixtureLength: specification.fixtureLength,
     lampCount: specification.lampCount ?? (technology?.[1] === 'LED' ? 1 : null),
     technology: technology?.[1] ?? 'Unknown',
+    mountingStyle: mounting?.[1] ?? 'Not specified',
     location: location ? titleCase(location) : 'Unassigned',
     notes: noteMatch?.[1].trim() ?? '',
     rawText: text,
   }
+  return { ...parsed, fixtureName: formatFixtureName(parsed) }
 }

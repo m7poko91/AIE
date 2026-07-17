@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ArrowUpDown,
   BarChart3,
   Building2,
   ChevronDown,
@@ -19,8 +20,10 @@ import {
   X,
 } from 'lucide-react'
 import { exportCsv, exportExcel } from './lib/export'
-import { isRemoveLastCommand, parseContinuationQuantity, parseFixtureUtterance } from './lib/parser'
-import { FIXTURE_TYPES, LAMP_TYPES, type FixtureEntry, type JobSite } from './types'
+import { formatFixtureName, isRemoveLastCommand, parseContinuationQuantity, parseFixtureUtterance } from './lib/parser'
+import { FIXTURE_TYPES, LAMP_TYPES, MOUNTING_STYLES, type FixtureEntry, type JobSite } from './types'
+
+type SortKey = 'fixtureName' | 'quantity' | 'fixtureLength' | 'lampCount' | 'technology' | 'fixtureType' | 'mountingStyle'
 
 type SpeechResultEvent = Event & {
   results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>
@@ -67,11 +70,26 @@ function App() {
         address: job.address === '214 Market Street' ? '' : job.address,
         entries: (job.entries ?? []).map((entry) => {
           const legacySize = entry.notes?.match(/^(\d+)\s*ft$/i)?.[0] ?? ''
-          return {
+          const fixtureSize = entry.fixtureSize ?? legacySize
+          const rectangularSize = fixtureSize.match(/^(\d+)\s*x\s*(\d+)$/i)
+          const lengthSize = fixtureSize.match(/^(\d+)\s*ft$/i)
+          const migrated = {
             ...entry,
-            fixtureSize: entry.fixtureSize ?? legacySize,
+            fixtureType: entry.fixtureType === 'Strip Light'
+              ? 'Strip'
+              : entry.fixtureType === 'Linear Fixture' && /\bwrap/i.test(entry.rawText)
+                ? 'Wrap'
+                : entry.fixtureType,
+            fixtureSize,
+            fixtureWidth: entry.fixtureWidth ?? (rectangularSize ? Number(rectangularSize[1]) : lengthSize ? 1 : null),
+            fixtureLength: entry.fixtureLength ?? (rectangularSize ? Number(rectangularSize[2]) : lengthSize ? Number(lengthSize[1]) : null),
             lampCount: entry.lampCount ?? (entry.technology === 'LED' ? 1 : null),
+            mountingStyle: entry.mountingStyle ?? 'Not specified',
             notes: legacySize && entry.fixtureSize === undefined ? '' : entry.notes,
+          }
+          return {
+            ...migrated,
+            fixtureName: entry.fixtureName ?? formatFixtureName(migrated),
           }
         }),
       }))
@@ -84,6 +102,8 @@ function App() {
   const [continuous, setContinuous] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('quantity')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [showJobModal, setShowJobModal] = useState(false)
   const [editingJobId, setEditingJobId] = useState<string | null>(null)
   const [showExport, setShowExport] = useState(false)
@@ -129,9 +149,30 @@ function App() {
       ).sort((a, b) => b[1] - a[1]),
     [entries],
   )
-  const visibleEntries = entries.filter((entry) =>
-    `${entry.fixtureType} ${entry.fixtureSize} ${entry.lampCount ?? ''} ${entry.technology} ${entry.location} ${entry.notes}`.toLowerCase().includes(search.toLowerCase()),
-  )
+  const visibleEntries = useMemo(() => {
+    const filtered = entries.filter((entry) =>
+      `${entry.fixtureName} ${entry.fixtureType} ${entry.fixtureSize} ${entry.lampCount ?? ''} ${entry.technology} ${entry.mountingStyle} ${entry.location} ${entry.notes}`.toLowerCase().includes(search.toLowerCase()),
+    )
+    return [...filtered].sort((left, right) => {
+      const leftValue = left[sortKey]
+      const rightValue = right[sortKey]
+      if (leftValue === null) return 1
+      if (rightValue === null) return -1
+      const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+        ? leftValue - rightValue
+        : String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true })
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [entries, search, sortDirection, sortKey])
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDirection('asc')
+    }
+  }
 
   function updateActiveJob(updater: (job: JobSite) => JobSite) {
     setJobs((current) => current.map((job) => (job.id === activeJob.id ? updater(job) : job)))
@@ -182,11 +223,15 @@ function App() {
       return
     }
 
-    const entry: FixtureEntry = {
+    const entryDetails = {
       ...parsed,
       fixtureType: parsed.fixtureType !== 'Other' ? parsed.fixtureType : voiceContextRef.current.fixtureType ?? 'Other',
       technology: parsed.technology !== 'Unknown' ? parsed.technology : voiceContextRef.current.technology ?? 'Unknown',
       location: parsed.location !== 'Unassigned' ? parsed.location : voiceContextRef.current.location ?? 'Unassigned',
+    }
+    const entry: FixtureEntry = {
+      ...entryDetails,
+      fixtureName: formatFixtureName(entryDetails),
       id: createId(),
       createdAt: new Date().toISOString(),
     }
@@ -244,7 +289,19 @@ function App() {
   function updateEntry<K extends keyof FixtureEntry>(id: string, field: K, value: FixtureEntry[K]) {
     updateActiveJob((job) => ({
       ...job,
-      entries: job.entries.map((entry) => (entry.id === id ? { ...entry, [field]: value } : entry)),
+      entries: job.entries.map((entry) => {
+        if (entry.id !== id) return entry
+        const updated = { ...entry, [field]: value }
+        if (field === 'fixtureWidth' || field === 'fixtureLength') {
+          updated.fixtureSize = updated.fixtureLength === null
+            ? ''
+            : `${updated.fixtureWidth ?? 1}x${updated.fixtureLength}`
+        }
+        if (['fixtureWidth', 'fixtureLength', 'lampCount', 'technology', 'fixtureType'].includes(field)) {
+          updated.fixtureName = formatFixtureName(updated)
+        }
+        return updated
+      }),
     }))
   }
 
@@ -443,17 +500,32 @@ function App() {
             </div>
             <div className="table-scroll">
               <table>
-                <thead><tr><th>Qty</th><th>Fixture type</th><th>Size / length</th><th>Lamps</th><th>Lamp type</th><th>Location / zone</th><th>Notes</th><th aria-label="Actions" /></tr></thead>
+                <thead>
+                  <tr>
+                    <SortHeader label="Fixture name" sortField="fixtureName" activeField={sortKey} onSort={toggleSort} />
+                    <SortHeader label="Qty" sortField="quantity" activeField={sortKey} onSort={toggleSort} />
+                    <SortHeader label="Length (ft)" sortField="fixtureLength" activeField={sortKey} onSort={toggleSort} />
+                    <SortHeader label="Lamps" sortField="lampCount" activeField={sortKey} onSort={toggleSort} />
+                    <SortHeader label="Lamp type" sortField="technology" activeField={sortKey} onSort={toggleSort} />
+                    <SortHeader label="Fixture type" sortField="fixtureType" activeField={sortKey} onSort={toggleSort} />
+                    <SortHeader label="Mounting" sortField="mountingStyle" activeField={sortKey} onSort={toggleSort} />
+                    <th>Location / zone</th>
+                    <th>Comments</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
                 <tbody>
                   {visibleEntries.map((entry) => (
                     <tr key={entry.id}>
+                      <td><input className="fixture-name-input" value={entry.fixtureName} onChange={(event) => updateEntry(entry.id, 'fixtureName', event.target.value)} /></td>
                       <td><input className="qty-input" type="number" min="1" value={entry.quantity} onChange={(event) => updateEntry(entry.id, 'quantity', Math.max(1, Number(event.target.value)))} /></td>
-                      <td><select value={entry.fixtureType} onChange={(event) => updateEntry(entry.id, 'fixtureType', event.target.value)}>{FIXTURE_TYPES.map((type) => <option key={type}>{type}</option>)}</select></td>
-                      <td><input value={entry.fixtureSize} onChange={(event) => updateEntry(entry.id, 'fixtureSize', event.target.value)} placeholder="e.g. 2x4 or 8 ft" /></td>
+                      <td><input className="qty-input" type="number" min="1" value={entry.fixtureLength ?? ''} onChange={(event) => updateEntry(entry.id, 'fixtureLength', event.target.value ? Math.max(1, Number(event.target.value)) : null)} placeholder="—" /></td>
                       <td><input className="qty-input" type="number" min="1" value={entry.lampCount ?? ''} onChange={(event) => updateEntry(entry.id, 'lampCount', event.target.value ? Math.max(1, Number(event.target.value)) : null)} placeholder="—" /></td>
                       <td><select value={entry.technology} onChange={(event) => updateEntry(entry.id, 'technology', event.target.value)}>{LAMP_TYPES.map((type) => <option key={type}>{type}</option>)}</select></td>
+                      <td><select value={entry.fixtureType} onChange={(event) => updateEntry(entry.id, 'fixtureType', event.target.value)}>{FIXTURE_TYPES.map((type) => <option key={type}>{type}</option>)}</select></td>
+                      <td><select value={entry.mountingStyle} onChange={(event) => updateEntry(entry.id, 'mountingStyle', event.target.value)}>{MOUNTING_STYLES.map((style) => <option key={style}>{style}</option>)}</select></td>
                       <td><input value={entry.location} onChange={(event) => updateEntry(entry.id, 'location', event.target.value)} /></td>
-                      <td><input value={entry.notes} onChange={(event) => updateEntry(entry.id, 'notes', event.target.value)} placeholder="Add note" /></td>
+                      <td><input value={entry.notes} onChange={(event) => updateEntry(entry.id, 'notes', event.target.value)} placeholder="Verbatim comments" /></td>
                       <td><button className="icon-button danger" onClick={() => deleteEntry(entry.id)} title="Delete entry"><Trash2 size={16} /></button></td>
                     </tr>
                   ))}
@@ -508,6 +580,26 @@ function App() {
 
 function EmptyMini({ icon, text }: { icon: React.ReactNode; text: string }) {
   return <div className="empty-mini"><span>{icon}</span><p>{text}</p></div>
+}
+
+function SortHeader({
+  label,
+  sortField,
+  activeField,
+  onSort,
+}: {
+  label: string
+  sortField: SortKey
+  activeField: SortKey
+  onSort: (key: SortKey) => void
+}) {
+  return (
+    <th>
+      <button className={activeField === sortField ? 'sort-header active' : 'sort-header'} onClick={() => onSort(sortField)}>
+        {label}<ArrowUpDown size={12} />
+      </button>
+    </th>
+  )
 }
 
 export default App
