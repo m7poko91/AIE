@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { exportCsv, exportExcel } from './lib/export'
-import { parseFixtureUtterance } from './lib/parser'
+import { parseContinuationQuantity, parseFixtureUtterance } from './lib/parser'
 import { FIXTURE_TYPES, TECHNOLOGIES, type FixtureEntry, type JobSite } from './types'
 
 type SpeechResultEvent = Event & {
@@ -76,6 +76,7 @@ function App() {
   const [newJobAddress, setNewJobAddress] = useState('')
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const continuousRef = useRef(continuous)
+  const voiceContextRef = useRef<Partial<Pick<FixtureEntry, 'fixtureType' | 'technology' | 'location'>>>({})
 
   const activeJob = jobs.find((job) => job.id === activeJobId) ?? jobs[0]
   const entries = useMemo(() => activeJob?.entries ?? [], [activeJob])
@@ -123,8 +124,56 @@ function App() {
 
   function addFromText(text: string) {
     if (!text.trim()) return
+
+    const continuationQuantity = parseContinuationQuantity(text)
+    if (continuationQuantity !== null) {
+      updateActiveJob((job) => {
+        const [latest, ...remaining] = job.entries
+        if (!latest) return job
+        return {
+          ...job,
+          entries: [
+            {
+              ...latest,
+              quantity: latest.quantity + continuationQuantity,
+              rawText: `${latest.rawText}; ${text.trim()}`,
+            },
+            ...remaining,
+          ],
+        }
+      })
+      setTranscript('')
+      return
+    }
+
     const parsed = parseFixtureUtterance(text)
-    const entry: FixtureEntry = { ...parsed, id: createId(), createdAt: new Date().toISOString() }
+    const isContextOnly = !/\d/.test(text)
+      && parsed.fixtureType === 'Other'
+      && parsed.location !== 'Unassigned'
+
+    if (isContextOnly) {
+      voiceContextRef.current = {
+        ...voiceContextRef.current,
+        technology: parsed.technology !== 'Unknown' ? parsed.technology : voiceContextRef.current.technology,
+        location: parsed.location,
+      }
+      setTranscript('')
+      return
+    }
+
+    const entry: FixtureEntry = {
+      ...parsed,
+      fixtureType: parsed.fixtureType !== 'Other' ? parsed.fixtureType : voiceContextRef.current.fixtureType ?? 'Other',
+      technology: parsed.technology !== 'Unknown' ? parsed.technology : voiceContextRef.current.technology ?? 'Unknown',
+      location: parsed.location !== 'Unassigned' ? parsed.location : voiceContextRef.current.location ?? 'Unassigned',
+      id: createId(),
+      createdAt: new Date().toISOString(),
+    }
+    voiceContextRef.current = {
+      fixtureType: entry.fixtureType,
+      technology: entry.technology,
+      location: entry.location,
+    }
     updateActiveJob((job) => ({ ...job, entries: [entry, ...job.entries] }))
     setTranscript('')
   }
@@ -187,6 +236,7 @@ function App() {
     const job = newJob(newJobName.trim(), newJobAddress.trim())
     setJobs((current) => [...current, job])
     setActiveJobId(job.id)
+    voiceContextRef.current = {}
     setNewJobName('')
     setNewJobAddress('')
     setShowJobModal(false)
@@ -223,7 +273,14 @@ function App() {
               <span>{activeJob.name}</span>
               <ChevronDown size={16} />
             </button>
-            <select aria-label="Select job site" value={activeJob.id} onChange={(event) => setActiveJobId(event.target.value)}>
+            <select
+              aria-label="Select job site"
+              value={activeJob.id}
+              onChange={(event) => {
+                setActiveJobId(event.target.value)
+                voiceContextRef.current = {}
+              }}
+            >
               {jobs.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}
             </select>
           </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseFixtureUtterance } from './parser'
+import { parseContinuationQuantity, parseFixtureUtterance } from './parser'
 
 describe('parseFixtureUtterance', () => {
   it('parses LED troffers and office location', () => {
@@ -61,5 +61,21 @@ describe('parseFixtureUtterance', () => {
       fixtureType: 'Strip Light',
       notes: '12 ft',
     })
+  })
+
+  it('adds quantities in a compound count and applies its scoped location', () => {
+    expect(parseFixtureUtterance('all of the following lights are in the warehouse: 4 LED high bays plus 2 more plus 1 more')).toMatchObject({
+      quantity: 7,
+      fixtureType: 'High Bay',
+      technology: 'LED',
+      location: 'Warehouse',
+    })
+  })
+
+  it('recognizes continuation fragments from speech recognition', () => {
+    expect(parseContinuationQuantity('plus 2 more')).toBe(2)
+    expect(parseContinuationQuantity('1 more')).toBe(1)
+    expect(parseContinuationQuantity('plus 2 more plus 1 more')).toBe(3)
+    expect(parseContinuationQuantity('4 LED high bays')).toBeNull()
   })
 })
