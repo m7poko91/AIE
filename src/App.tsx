@@ -78,7 +78,7 @@ function App() {
   const continuousRef = useRef(continuous)
 
   const activeJob = jobs.find((job) => job.id === activeJobId) ?? jobs[0]
-  const entries = activeJob?.entries ?? []
+  const entries = useMemo(() => activeJob?.entries ?? [], [activeJob])
   const speechSupported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
 
   useEffect(() => {

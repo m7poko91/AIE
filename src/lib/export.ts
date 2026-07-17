@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import writeXlsxFile, { type SheetData } from 'write-excel-file/browser'
 import type { JobSite } from '../types'
 
 const rowsFor = (job: JobSite) =>
@@ -24,23 +24,56 @@ function download(blob: Blob, fileName: string) {
 }
 
 export function exportCsv(job: JobSite) {
-  const sheet = XLSX.utils.json_to_sheet(rowsFor(job))
-  const csv = XLSX.utils.sheet_to_csv(sheet)
+  const rows = rowsFor(job)
+  const headers = Object.keys(rows[0] ?? {
+    Quantity: '',
+    'Fixture Type': '',
+    Technology: '',
+    Location: '',
+    Notes: '',
+    'Original Voice Note': '',
+    'Counted At': '',
+  })
+  const escape = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+  const csv = [headers.map(escape), ...rows.map((row) => Object.values(row).map(escape))]
+    .map((row) => row.join(','))
+    .join('\r\n')
   download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${safeFileName(job.name)}-light-count.csv`)
 }
 
-export function exportExcel(job: JobSite) {
-  const workbook = XLSX.utils.book_new()
-  const entriesSheet = XLSX.utils.json_to_sheet(rowsFor(job))
-  entriesSheet['!cols'] = [{ wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 24 }, { wch: 30 }, { wch: 45 }, { wch: 22 }]
-  XLSX.utils.book_append_sheet(workbook, entriesSheet, 'Fixture Count')
-
-  const byType = Object.entries(
+export async function exportExcel(job: JobSite) {
+  const headers = ['Quantity', 'Fixture Type', 'Technology', 'Location', 'Notes', 'Original Voice Note', 'Counted At']
+  const headerRow = headers.map((value) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E7EFE8' }))
+  const entryRows: SheetData = [
+    headerRow,
+    ...job.entries.map((entry) => [
+      entry.quantity,
+      entry.fixtureType,
+      entry.technology,
+      entry.location,
+      entry.notes,
+      entry.rawText,
+      new Date(entry.createdAt).toLocaleString(),
+    ]),
+  ]
+  const totals = Object.entries(
     job.entries.reduce<Record<string, number>>((totals, entry) => {
       totals[entry.fixtureType] = (totals[entry.fixtureType] ?? 0) + entry.quantity
       return totals
     }, {}),
-  ).map(([type, quantity]) => ({ 'Fixture Type': type, Quantity: quantity }))
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(byType), 'Summary')
-  XLSX.writeFile(workbook, `${safeFileName(job.name)}-light-count.xlsx`)
+  )
+  const summaryRows: SheetData = [
+    [
+      { value: 'Fixture Type', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
+      { value: 'Quantity', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
+    ],
+    ...totals.map(([type, quantity]) => [type, quantity]),
+    [],
+    [{ value: 'Grand Total', fontWeight: 'bold' }, { value: job.entries.reduce((sum, entry) => sum + entry.quantity, 0), fontWeight: 'bold' }],
+  ]
+
+  await writeXlsxFile([
+    { data: entryRows, sheet: 'Fixture Count', columns: [{ width: 12 }, { width: 22 }, { width: 16 }, { width: 25 }, { width: 32 }, { width: 48 }, { width: 22 }] },
+    { data: summaryRows, sheet: 'Summary', columns: [{ width: 24 }, { width: 14 }] },
+  ]).toFile(`${safeFileName(job.name)}-light-count.xlsx`)
 }
