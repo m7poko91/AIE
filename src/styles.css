@@ -60,12 +60,14 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .export-menu button:hover { background: #f3f6f1; }
 
 .content { max-width: 1240px; margin: auto; padding: 35px 38px 70px; }
-.page-heading { margin-bottom: 25px; }
+.page-heading { margin-bottom: 25px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .breadcrumb { margin: 0 0 8px; color: #7c8981; font-size: 12px; }
 .breadcrumb span { padding: 0 5px; color: #acb5ae; }
 h1, h2, h3 { font-family: Manrope, sans-serif; }
 h1 { font-size: 28px; letter-spacing: -.035em; margin: 0 0 6px; }
 .page-heading > div > p:last-child { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 12px; }
+.job-management-actions { display: flex; gap: 8px; }
+.mobile-new-job { display: none; }
 
 .voice-card {
   position: relative; overflow: hidden; min-height: 191px; padding: 29px 32px; display: flex; justify-content: space-between; align-items: center;
@@ -156,6 +158,19 @@ td .qty-input { width: 48px; font-weight: 700; }
 .modal label input { display: block; width: 100%; height: 41px; margin-top: 6px; padding: 0 11px; border: 1px solid #d5ddd5; border-radius: 7px; outline: 0; font-size: 12px; }
 .modal label input:focus { border-color: #5a806e; box-shadow: 0 0 0 3px #e9f0ea; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.job-modal { max-width: 490px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.saved-jobs { margin: 18px 0; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: #f8faf7; }
+.saved-jobs-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; color: #4c5c53; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.saved-jobs-heading button { display: flex; align-items: center; gap: 3px; padding: 4px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--green-2); font-size: 10px; font-weight: 700; text-transform: none; }
+.saved-jobs-list { display: grid; gap: 5px; max-height: 180px; overflow-y: auto; }
+.saved-jobs-list > button { min-height: 49px; padding: 7px 9px; display: flex; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 7px; background: white; color: #314139; text-align: left; }
+.saved-jobs-list > button.active { border-color: #87a394; box-shadow: 0 0 0 2px #e7eee8; }
+.saved-jobs-list > button > span { flex: 1; min-width: 0; }
+.saved-jobs-list strong, .saved-jobs-list small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.saved-jobs-list strong { font-size: 11px; }
+.saved-jobs-list small { margin-top: 2px; color: #8a968e; font-size: 9px; }
+.saved-jobs-list b { min-width: 27px; height: 27px; padding: 0 5px; display: grid; place-items: center; border-radius: 14px; background: #edf2ec; font-size: 10px; }
+.storage-note { margin-top: 13px; color: #859189; font-size: 9px; }
 
 @media (max-width: 900px) {
   .sidebar { width: 76px; padding-inline: 12px; }
@@ -177,6 +192,11 @@ td .qty-input { width: 48px; font-weight: 700; }
   .header-actions .secondary-button { display: none; }
   .job-select span { max-width: 155px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .content { padding: 24px 15px 50px; }
+  .page-heading { align-items: flex-start; }
+  .page-heading > div:first-child { min-width: 0; }
+  .page-heading .job-management-actions { flex-direction: column; flex-shrink: 0; }
+  .page-heading .secondary-button { min-height: 34px; padding: 0 10px; font-size: 11px; }
+  .mobile-new-job { display: inline-flex; }
   .voice-card { padding: 26px 22px; flex-direction: column; align-items: flex-start; gap: 23px; }
   .voice-controls { width: 100%; }
   .quick-add { margin-inline: 8px; }
