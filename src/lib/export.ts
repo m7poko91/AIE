@@ -5,7 +5,9 @@ const rowsFor = (job: JobSite) =>
   job.entries.map((entry) => ({
     Quantity: entry.quantity,
     'Fixture Type': entry.fixtureType,
-    Technology: entry.technology,
+    'Fixture Size / Length': entry.fixtureSize,
+    'Lamps per Fixture': entry.lampCount ?? '',
+    'Lamp Type': entry.technology,
     Location: entry.location,
     Notes: entry.notes,
     'Original Voice Note': entry.rawText,
@@ -28,7 +30,9 @@ export function exportCsv(job: JobSite) {
   const headers = Object.keys(rows[0] ?? {
     Quantity: '',
     'Fixture Type': '',
-    Technology: '',
+    'Fixture Size / Length': '',
+    'Lamps per Fixture': '',
+    'Lamp Type': '',
     Location: '',
     Notes: '',
     'Original Voice Note': '',
@@ -42,13 +46,15 @@ export function exportCsv(job: JobSite) {
 }
 
 export async function exportExcel(job: JobSite) {
-  const headers = ['Quantity', 'Fixture Type', 'Technology', 'Location', 'Notes', 'Original Voice Note', 'Counted At']
+  const headers = ['Quantity', 'Fixture Type', 'Fixture Size / Length', 'Lamps per Fixture', 'Lamp Type', 'Location', 'Notes', 'Original Voice Note', 'Counted At']
   const headerRow = headers.map((value) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E7EFE8' }))
   const entryRows: SheetData = [
     headerRow,
     ...job.entries.map((entry) => [
       entry.quantity,
       entry.fixtureType,
+      entry.fixtureSize,
+      entry.lampCount,
       entry.technology,
       entry.location,
       entry.notes,
@@ -62,6 +68,12 @@ export async function exportExcel(job: JobSite) {
       return totals
     }, {}),
   )
+  const lampTypeTotals = Object.entries(
+    job.entries.reduce<Record<string, number>>((totals, entry) => {
+      totals[entry.technology] = (totals[entry.technology] ?? 0) + entry.quantity
+      return totals
+    }, {}),
+  )
   const summaryRows: SheetData = [
     [
       { value: 'Fixture Type', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
@@ -69,11 +81,17 @@ export async function exportExcel(job: JobSite) {
     ],
     ...totals.map(([type, quantity]) => [type, quantity]),
     [],
+    [
+      { value: 'Lamp Type', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
+      { value: 'Quantity', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
+    ],
+    ...lampTypeTotals.map(([type, quantity]) => [type, quantity]),
+    [],
     [{ value: 'Grand Total', fontWeight: 'bold' }, { value: job.entries.reduce((sum, entry) => sum + entry.quantity, 0), fontWeight: 'bold' }],
   ]
 
   await writeXlsxFile([
-    { data: entryRows, sheet: 'Fixture Count', columns: [{ width: 12 }, { width: 22 }, { width: 16 }, { width: 25 }, { width: 32 }, { width: 48 }, { width: 22 }] },
+    { data: entryRows, sheet: 'Fixture Count', columns: [{ width: 12 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 25 }, { width: 32 }, { width: 48 }, { width: 22 }] },
     { data: summaryRows, sheet: 'Summary', columns: [{ width: 24 }, { width: 14 }] },
   ]).toFile(`${safeFileName(job.name)}-light-count.xlsx`)
 }

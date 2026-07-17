@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { exportCsv, exportExcel } from './lib/export'
 import { isRemoveLastCommand, parseContinuationQuantity, parseFixtureUtterance } from './lib/parser'
-import { FIXTURE_TYPES, TECHNOLOGIES, type FixtureEntry, type JobSite } from './types'
+import { FIXTURE_TYPES, LAMP_TYPES, type FixtureEntry, type JobSite } from './types'
 
 type SpeechResultEvent = Event & {
   results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>
@@ -62,9 +62,19 @@ function App() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (!saved) return [newJob()]
-      return (JSON.parse(saved) as JobSite[]).map((job) => (
-        job.address === '214 Market Street' ? { ...job, address: '' } : job
-      ))
+      return (JSON.parse(saved) as JobSite[]).map((job) => ({
+        ...job,
+        address: job.address === '214 Market Street' ? '' : job.address,
+        entries: (job.entries ?? []).map((entry) => {
+          const legacySize = entry.notes?.match(/^(\d+)\s*ft$/i)?.[0] ?? ''
+          return {
+            ...entry,
+            fixtureSize: entry.fixtureSize ?? legacySize,
+            lampCount: entry.lampCount ?? (entry.technology === 'LED' ? 1 : null),
+            notes: legacySize && entry.fixtureSize === undefined ? '' : entry.notes,
+          }
+        }),
+      }))
     } catch {
       return [newJob()]
     }
@@ -120,7 +130,7 @@ function App() {
     [entries],
   )
   const visibleEntries = entries.filter((entry) =>
-    `${entry.fixtureType} ${entry.technology} ${entry.location} ${entry.notes}`.toLowerCase().includes(search.toLowerCase()),
+    `${entry.fixtureType} ${entry.fixtureSize} ${entry.lampCount ?? ''} ${entry.technology} ${entry.location} ${entry.notes}`.toLowerCase().includes(search.toLowerCase()),
   )
 
   function updateActiveJob(updater: (job: JobSite) => JobSite) {
@@ -231,7 +241,7 @@ function App() {
     setIsListening(false)
   }
 
-  function updateEntry(id: string, field: keyof FixtureEntry, value: string | number) {
+  function updateEntry<K extends keyof FixtureEntry>(id: string, field: K, value: FixtureEntry[K]) {
     updateActiveJob((job) => ({
       ...job,
       entries: job.entries.map((entry) => (entry.id === id ? { ...entry, [field]: value } : entry)),
@@ -360,7 +370,7 @@ function App() {
               <div className="voice-label"><Sparkles size={15} />VOICE COUNT</div>
               <h2>{isListening ? 'Listening…' : 'Count fixtures as you walk'}</h2>
               <p>{isListening ? (transcript || 'Say a quantity, fixture, and location.') : 'Tap the microphone and speak naturally. We’ll sort out the details.'}</p>
-              <div className="example"><span>TRY SAYING</span> “20 LED troffers in the east office”</div>
+              <div className="example"><span>TRY SAYING</span> “10, 1 by 8 by 4-lamp T8 strip fixtures in the warehouse”</div>
             </div>
             <div className="voice-controls">
               <label className="continuous-toggle">
@@ -381,7 +391,7 @@ function App() {
           </section>
 
           <form className="quick-add" onSubmit={(event) => { event.preventDefault(); addFromText(transcript) }}>
-            <input value={transcript} onChange={(event) => setTranscript(event.target.value)} placeholder="Or type a count, e.g. “8 high bays in warehouse zone A”" />
+            <input value={transcript} onChange={(event) => setTranscript(event.target.value)} placeholder="Or type a count, size, lamps, lamp type, and location" />
             <button className="secondary-button" type="submit" disabled={!transcript.trim()}><Plus size={17} />Add count</button>
           </form>
 
@@ -433,13 +443,15 @@ function App() {
             </div>
             <div className="table-scroll">
               <table>
-                <thead><tr><th>Qty</th><th>Fixture type</th><th>Technology</th><th>Location / zone</th><th>Notes</th><th aria-label="Actions" /></tr></thead>
+                <thead><tr><th>Qty</th><th>Fixture type</th><th>Size / length</th><th>Lamps</th><th>Lamp type</th><th>Location / zone</th><th>Notes</th><th aria-label="Actions" /></tr></thead>
                 <tbody>
                   {visibleEntries.map((entry) => (
                     <tr key={entry.id}>
                       <td><input className="qty-input" type="number" min="1" value={entry.quantity} onChange={(event) => updateEntry(entry.id, 'quantity', Math.max(1, Number(event.target.value)))} /></td>
                       <td><select value={entry.fixtureType} onChange={(event) => updateEntry(entry.id, 'fixtureType', event.target.value)}>{FIXTURE_TYPES.map((type) => <option key={type}>{type}</option>)}</select></td>
-                      <td><select value={entry.technology} onChange={(event) => updateEntry(entry.id, 'technology', event.target.value)}>{TECHNOLOGIES.map((type) => <option key={type}>{type}</option>)}</select></td>
+                      <td><input value={entry.fixtureSize} onChange={(event) => updateEntry(entry.id, 'fixtureSize', event.target.value)} placeholder="e.g. 2x4 or 8 ft" /></td>
+                      <td><input className="qty-input" type="number" min="1" value={entry.lampCount ?? ''} onChange={(event) => updateEntry(entry.id, 'lampCount', event.target.value ? Math.max(1, Number(event.target.value)) : null)} placeholder="—" /></td>
+                      <td><select value={entry.technology} onChange={(event) => updateEntry(entry.id, 'technology', event.target.value)}>{LAMP_TYPES.map((type) => <option key={type}>{type}</option>)}</select></td>
                       <td><input value={entry.location} onChange={(event) => updateEntry(entry.id, 'location', event.target.value)} /></td>
                       <td><input value={entry.notes} onChange={(event) => updateEntry(entry.id, 'notes', event.target.value)} placeholder="Add note" /></td>
                       <td><button className="icon-button danger" onClick={() => deleteEntry(entry.id)} title="Delete entry"><Trash2 size={16} /></button></td>

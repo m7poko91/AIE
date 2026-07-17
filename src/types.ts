@@ -2,6 +2,8 @@ export type FixtureEntry = {
   id: string
   quantity: number
   fixtureType: string
+  fixtureSize: string
+  lampCount: number | null
   technology: string
   location: string
   notes: string
@@ -31,4 +33,16 @@ export const FIXTURE_TYPES = [
   'Other',
 ] as const
 
-export const TECHNOLOGIES = ['LED', 'HID', 'Fluorescent', 'Halogen', 'Incandescent', 'Unknown'] as const
+export const LAMP_TYPES = [
+  'LED',
+  'T5',
+  'T8',
+  'T12',
+  'Fluorescent',
+  'HID',
+  'Metal Halide',
+  'High Pressure Sodium',
+  'Halogen',
+  'Incandescent',
+  'Unknown',
+] as const

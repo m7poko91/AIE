@@ -41,8 +41,9 @@ describe('parseFixtureUtterance', () => {
     expect(parseFixtureUtterance('there were 8 8-foot LED strip fixtures')).toMatchObject({
       quantity: 8,
       fixtureType: 'Strip Light',
+      fixtureSize: '8 ft',
+      lampCount: 1,
       technology: 'LED',
-      notes: '8 ft',
     })
   })
 
@@ -50,8 +51,8 @@ describe('parseFixtureUtterance', () => {
     expect(parseFixtureUtterance('88 foot LED strip fixtures')).toMatchObject({
       quantity: 8,
       fixtureType: 'Strip Light',
+      fixtureSize: '8 ft',
       technology: 'LED',
-      notes: '8 ft',
     })
   })
 
@@ -59,7 +60,42 @@ describe('parseFixtureUtterance', () => {
     expect(parseFixtureUtterance('1212 foot LED strip fixtures')).toMatchObject({
       quantity: 12,
       fixtureType: 'Strip Light',
-      notes: '12 ft',
+      fixtureSize: '12 ft',
+    })
+  })
+
+  it.each([
+    ['18 foot fixture', 1, '8 ft'],
+    ['2 8-foot fixtures', 2, '8 ft'],
+    ['32 4ft fixtures', 32, '4 ft'],
+    ['324 foot fixtures', 32, '4 ft'],
+  ])('separates quantity and length in “%s”', (speech, quantity, fixtureSize) => {
+    expect(parseFixtureUtterance(speech)).toMatchObject({ quantity, fixtureSize })
+  })
+
+  it.each([
+    ['4 2 by 4 LED fixtures', 4, '2x4', 'LED', 1],
+    ['19 2x2 T12 fixtures', 19, '2x2', 'T12', null],
+  ])('separates quantity and rectangular size in “%s”', (speech, quantity, fixtureSize, technology, lampCount) => {
+    expect(parseFixtureUtterance(speech)).toMatchObject({ quantity, fixtureSize, technology, lampCount })
+  })
+
+  it('parses quantity, fixture dimensions, lamp count, and lamp type independently', () => {
+    expect(parseFixtureUtterance('10 1 by 8 by 4-lamp T8 strip fixtures')).toMatchObject({
+      quantity: 10,
+      fixtureType: 'Strip Light',
+      fixtureSize: '1x8',
+      lampCount: 4,
+      technology: 'T8',
+    })
+  })
+
+  it('defaults to one fixture when only its specification is spoken', () => {
+    expect(parseFixtureUtterance('1 by 8 by 4-lamp T8 fixture')).toMatchObject({
+      quantity: 1,
+      fixtureSize: '1x8',
+      lampCount: 4,
+      technology: 'T8',
     })
   })
 
