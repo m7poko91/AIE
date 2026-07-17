@@ -30,7 +30,7 @@ describe('parseFixtureUtterance', () => {
   it('extracts notes separately from location', () => {
     expect(parseFixtureUtterance('6 fluorescent strip lights in storage with damaged lenses')).toMatchObject({
       quantity: 6,
-      fixtureType: 'Strip Light',
+      fixtureType: 'Strip',
       technology: 'Fluorescent',
       location: 'Storage',
       notes: 'damaged lenses',
@@ -40,26 +40,104 @@ describe('parseFixtureUtterance', () => {
   it('separates fixture quantity from an 8-foot dimension', () => {
     expect(parseFixtureUtterance('there were 8 8-foot LED strip fixtures')).toMatchObject({
       quantity: 8,
-      fixtureType: 'Strip Light',
+      fixtureType: 'Strip',
+      fixtureSize: '8 ft',
+      lampCount: 1,
       technology: 'LED',
-      notes: '8 ft',
     })
   })
 
   it('corrects a speech engine collapsing 8, 8-foot into 88 foot', () => {
     expect(parseFixtureUtterance('88 foot LED strip fixtures')).toMatchObject({
       quantity: 8,
-      fixtureType: 'Strip Light',
+      fixtureType: 'Strip',
+      fixtureSize: '8 ft',
       technology: 'LED',
-      notes: '8 ft',
     })
   })
 
   it('supports repeated multi-digit quantities and dimensions', () => {
     expect(parseFixtureUtterance('1212 foot LED strip fixtures')).toMatchObject({
       quantity: 12,
-      fixtureType: 'Strip Light',
-      notes: '12 ft',
+      fixtureType: 'Strip',
+      fixtureSize: '12 ft',
+    })
+  })
+
+  it.each([
+    ['there is 1 8ft fixture', 1, '8 ft'],
+    ['18 foot fixture', 1, '8 ft'],
+    ['2 8-foot fixtures', 2, '8 ft'],
+    ['32 4ft fixtures', 32, '4 ft'],
+    ['324 foot fixtures', 32, '4 ft'],
+  ])('separates quantity and length in “%s”', (speech, quantity, fixtureSize) => {
+    expect(parseFixtureUtterance(speech)).toMatchObject({ quantity, fixtureSize })
+  })
+
+  it.each([
+    ['4 2 by 4 LED fixtures', 4, '2x4', 'LED', 1],
+    ['19 2x2 T12 fixtures', 19, '2x2', 'T12', null],
+  ])('separates quantity and rectangular size in “%s”', (speech, quantity, fixtureSize, technology, lampCount) => {
+    expect(parseFixtureUtterance(speech)).toMatchObject({ quantity, fixtureSize, technology, lampCount })
+  })
+
+  it('parses quantity, fixture dimensions, lamp count, and lamp type independently', () => {
+    expect(parseFixtureUtterance('10 1 by 8 by 4-lamp T8 strip fixtures')).toMatchObject({
+      quantity: 10,
+      fixtureType: 'Strip',
+      fixtureSize: '1x8',
+      lampCount: 4,
+      technology: 'T8',
+    })
+  })
+
+  it('defaults to one fixture when only its specification is spoken', () => {
+    expect(parseFixtureUtterance('1 by 8 by 4-lamp T8 fixture')).toMatchObject({
+      quantity: 1,
+      fixtureSize: '1x8',
+      lampCount: 4,
+      technology: 'T8',
+    })
+  })
+
+  it('normalizes full notation and spoken length notation to the same fixture name', () => {
+    const fullNotation = parseFixtureUtterance('10 1 by 8 by 4-lamp T8 strip fixtures')
+    const lengthNotation = parseFixtureUtterance('10 8ft 4-lamp T8 strips')
+
+    expect(fullNotation).toMatchObject({
+      fixtureName: '1x8x4-lamp T8',
+      fixtureWidth: 1,
+      fixtureLength: 8,
+      lampCount: 4,
+      technology: 'T8',
+      fixtureType: 'Strip',
+    })
+    expect(lengthNotation).toMatchObject({
+      fixtureName: '1x8x4-lamp T8',
+      fixtureWidth: 1,
+      fixtureLength: 8,
+      lampCount: 4,
+      technology: 'T8',
+      fixtureType: 'Strip',
+    })
+  })
+
+  it.each([
+    ['surface strip fixture', 'Strip', 'Surface'],
+    ['pendant high bay', 'High Bay', 'Pendant'],
+    ['recessed troffer', 'Troffer', 'Recessed'],
+    ['wrap fixture', 'Wrap', 'Not specified'],
+  ])('categorizes fixture and mounting styles in “%s”', (speech, fixtureType, mountingStyle) => {
+    expect(parseFixtureUtterance(speech)).toMatchObject({ fixtureType, mountingStyle })
+  })
+
+  it('preserves explicit comments verbatim', () => {
+    expect(parseFixtureUtterance('4 2x4 T8 troffers in office with Two lamps are burned out')).toMatchObject({
+      notes: 'Two lamps are burned out',
+      location: 'Office',
+    })
+    expect(parseFixtureUtterance('8ft 4-lamp T8 strip comment: missing lens on east end')).toMatchObject({
+      notes: 'missing lens on east end',
     })
   })
 

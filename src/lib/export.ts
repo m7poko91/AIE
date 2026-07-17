@@ -3,11 +3,15 @@ import type { JobSite } from '../types'
 
 const rowsFor = (job: JobSite) =>
   job.entries.map((entry) => ({
+    'Fixture Name': entry.fixtureName,
     Quantity: entry.quantity,
+    'Length (ft)': entry.fixtureLength ?? '',
+    'Lamps per Fixture': entry.lampCount ?? '',
+    'Lamp Type': entry.technology,
     'Fixture Type': entry.fixtureType,
-    Technology: entry.technology,
+    'Mounting Style': entry.mountingStyle,
     Location: entry.location,
-    Notes: entry.notes,
+    Comments: entry.notes,
     'Original Voice Note': entry.rawText,
     'Counted At': new Date(entry.createdAt).toLocaleString(),
   }))
@@ -26,11 +30,15 @@ function download(blob: Blob, fileName: string) {
 export function exportCsv(job: JobSite) {
   const rows = rowsFor(job)
   const headers = Object.keys(rows[0] ?? {
+    'Fixture Name': '',
     Quantity: '',
+    'Length (ft)': '',
+    'Lamps per Fixture': '',
+    'Lamp Type': '',
     'Fixture Type': '',
-    Technology: '',
+    'Mounting Style': '',
     Location: '',
-    Notes: '',
+    Comments: '',
     'Original Voice Note': '',
     'Counted At': '',
   })
@@ -42,14 +50,18 @@ export function exportCsv(job: JobSite) {
 }
 
 export async function exportExcel(job: JobSite) {
-  const headers = ['Quantity', 'Fixture Type', 'Technology', 'Location', 'Notes', 'Original Voice Note', 'Counted At']
+  const headers = ['Fixture Name', 'Quantity', 'Length (ft)', 'Lamps per Fixture', 'Lamp Type', 'Fixture Type', 'Mounting Style', 'Location', 'Comments', 'Original Voice Note', 'Counted At']
   const headerRow = headers.map((value) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E7EFE8' }))
   const entryRows: SheetData = [
     headerRow,
     ...job.entries.map((entry) => [
+      entry.fixtureName,
       entry.quantity,
-      entry.fixtureType,
+      entry.fixtureLength,
+      entry.lampCount,
       entry.technology,
+      entry.fixtureType,
+      entry.mountingStyle,
       entry.location,
       entry.notes,
       entry.rawText,
@@ -62,6 +74,12 @@ export async function exportExcel(job: JobSite) {
       return totals
     }, {}),
   )
+  const lampTypeTotals = Object.entries(
+    job.entries.reduce<Record<string, number>>((totals, entry) => {
+      totals[entry.technology] = (totals[entry.technology] ?? 0) + entry.quantity
+      return totals
+    }, {}),
+  )
   const summaryRows: SheetData = [
     [
       { value: 'Fixture Type', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
@@ -69,11 +87,17 @@ export async function exportExcel(job: JobSite) {
     ],
     ...totals.map(([type, quantity]) => [type, quantity]),
     [],
+    [
+      { value: 'Lamp Type', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
+      { value: 'Quantity', fontWeight: 'bold', backgroundColor: '#E7EFE8' },
+    ],
+    ...lampTypeTotals.map(([type, quantity]) => [type, quantity]),
+    [],
     [{ value: 'Grand Total', fontWeight: 'bold' }, { value: job.entries.reduce((sum, entry) => sum + entry.quantity, 0), fontWeight: 'bold' }],
   ]
 
   await writeXlsxFile([
-    { data: entryRows, sheet: 'Fixture Count', columns: [{ width: 12 }, { width: 22 }, { width: 16 }, { width: 25 }, { width: 32 }, { width: 48 }, { width: 22 }] },
+    { data: entryRows, sheet: 'Fixture Count', columns: [{ width: 28 }, { width: 12 }, { width: 14 }, { width: 18 }, { width: 18 }, { width: 20 }, { width: 18 }, { width: 25 }, { width: 32 }, { width: 48 }, { width: 22 }] },
     { data: summaryRows, sheet: 'Summary', columns: [{ width: 24 }, { width: 14 }] },
   ]).toFile(`${safeFileName(job.name)}-light-count.xlsx`)
 }

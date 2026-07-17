@@ -1,8 +1,14 @@
 export type FixtureEntry = {
   id: string
   quantity: number
+  fixtureName: string
   fixtureType: string
+  fixtureSize: string
+  fixtureWidth: number | null
+  fixtureLength: number | null
+  lampCount: number | null
   technology: string
+  mountingStyle: string
   location: string
   notes: string
   rawText: string
@@ -18,12 +24,13 @@ export type JobSite = {
 }
 
 export const FIXTURE_TYPES = [
+  'Strip',
   'Troffer',
   'High Bay',
+  'Wrap',
   'Wall Pack',
   'Can Light',
   'Parking Lot Pole',
-  'Strip Light',
   'Linear Fixture',
   'Flood Light',
   'Exit Sign',
@@ -31,4 +38,18 @@ export const FIXTURE_TYPES = [
   'Other',
 ] as const
 
-export const TECHNOLOGIES = ['LED', 'HID', 'Fluorescent', 'Halogen', 'Incandescent', 'Unknown'] as const
+export const MOUNTING_STYLES = ['Surface', 'Pendant', 'Recessed', 'Not specified'] as const
+
+export const LAMP_TYPES = [
+  'LED',
+  'T5',
+  'T8',
+  'T12',
+  'Fluorescent',
+  'HID',
+  'Metal Halide',
+  'High Pressure Sodium',
+  'Halogen',
+  'Incandescent',
+  'Unknown',
+] as const
