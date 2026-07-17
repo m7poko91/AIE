@@ -10,6 +10,7 @@ import {
   Mic,
   MicOff,
   MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   Settings,
@@ -18,7 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { exportCsv, exportExcel } from './lib/export'
-import { parseContinuationQuantity, parseFixtureUtterance } from './lib/parser'
+import { isRemoveLastCommand, parseContinuationQuantity, parseFixtureUtterance } from './lib/parser'
 import { FIXTURE_TYPES, TECHNOLOGIES, type FixtureEntry, type JobSite } from './types'
 
 type SpeechResultEvent = Event & {
@@ -52,7 +53,7 @@ function createId() {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
 }
 
-function newJob(name = 'Downtown Office Renovation', address = '214 Market Street') : JobSite {
+function newJob(name = 'My First Job', address = '') : JobSite {
   return { id: createId(), name, address, entries: [], createdAt: new Date().toISOString() }
 }
 
@@ -60,7 +61,10 @@ function App() {
   const [jobs, setJobs] = useState<JobSite[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      return saved ? JSON.parse(saved) : [newJob()]
+      if (!saved) return [newJob()]
+      return (JSON.parse(saved) as JobSite[]).map((job) => (
+        job.address === '214 Market Street' ? { ...job, address: '' } : job
+      ))
     } catch {
       return [newJob()]
     }
@@ -71,6 +75,7 @@ function App() {
   const [transcript, setTranscript] = useState('')
   const [search, setSearch] = useState('')
   const [showJobModal, setShowJobModal] = useState(false)
+  const [editingJobId, setEditingJobId] = useState<string | null>(null)
   const [showExport, setShowExport] = useState(false)
   const [newJobName, setNewJobName] = useState('')
   const [newJobAddress, setNewJobAddress] = useState('')
@@ -124,6 +129,12 @@ function App() {
 
   function addFromText(text: string) {
     if (!text.trim()) return
+
+    if (isRemoveLastCommand(text)) {
+      updateActiveJob((job) => ({ ...job, entries: job.entries.slice(1) }))
+      setTranscript('')
+      return
+    }
 
     const continuationQuantity = parseContinuationQuantity(text)
     if (continuationQuantity !== null) {
@@ -231,8 +242,41 @@ function App() {
     updateActiveJob((job) => ({ ...job, entries: job.entries.filter((entry) => entry.id !== id) }))
   }
 
-  function createJob() {
+  function openJobEditor(job: JobSite) {
+    setEditingJobId(job.id)
+    setNewJobName(job.name)
+    setNewJobAddress(job.address)
+    setShowJobModal(true)
+  }
+
+  function openNewJob() {
+    setEditingJobId(null)
+    setNewJobName('')
+    setNewJobAddress('')
+    setShowJobModal(true)
+  }
+
+  function selectJob(job: JobSite) {
+    setActiveJobId(job.id)
+    voiceContextRef.current = {}
+    setEditingJobId(job.id)
+    setNewJobName(job.name)
+    setNewJobAddress(job.address)
+  }
+
+  function saveJob() {
     if (!newJobName.trim()) return
+
+    if (editingJobId) {
+      setJobs((current) => current.map((job) => (
+        job.id === editingJobId
+          ? { ...job, name: newJobName.trim(), address: newJobAddress.trim() }
+          : job
+      )))
+      setShowJobModal(false)
+      return
+    }
+
     const job = newJob(newJobName.trim(), newJobAddress.trim())
     setJobs((current) => [...current, job])
     setActiveJobId(job.id)
@@ -285,7 +329,7 @@ function App() {
             </select>
           </div>
           <div className="header-actions">
-            <button className="secondary-button" onClick={() => setShowJobModal(true)}><Plus size={17} />New job</button>
+            <button className="secondary-button" onClick={openNewJob}><Plus size={17} />New job</button>
             <div className="export-wrap">
               <button className="primary-button" onClick={() => setShowExport((value) => !value)}><Download size={17} />Export<ChevronDown size={14} /></button>
               {showExport && (
@@ -304,6 +348,10 @@ function App() {
               <p className="breadcrumb">Job sites <span>/</span> {activeJob.name}</p>
               <h1>Fixture count</h1>
               <p><MapPin size={14} /> {activeJob.address || 'No address added'} <span>•</span> Updated just now</p>
+            </div>
+            <div className="job-management-actions">
+              <button className="secondary-button" onClick={() => openJobEditor(activeJob)}><Pencil size={15} />Manage jobs</button>
+              <button className="secondary-button mobile-new-job" onClick={openNewJob}><Plus size={15} />New job</button>
             </div>
           </section>
 
@@ -414,14 +462,31 @@ function App() {
 
       {showJobModal && (
         <div className="modal-backdrop" onMouseDown={() => setShowJobModal(false)}>
-          <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="modal job-modal" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowJobModal(false)}><X size={19} /></button>
             <span className="modal-icon"><Building2 size={22} /></span>
-            <h2>Create a job site</h2>
-            <p>Start a separate fixture count for a new project.</p>
+            <h2>{editingJobId ? 'Manage job sites' : 'Create a job site'}</h2>
+            <p>{editingJobId ? 'Switch projects or update the selected job’s details.' : 'Start a separate fixture count for a new project.'}</p>
+            {editingJobId && (
+              <div className="saved-jobs">
+                <div className="saved-jobs-heading">
+                  <strong>Saved projects</strong>
+                  <button onClick={openNewJob}><Plus size={14} />New</button>
+                </div>
+                <div className="saved-jobs-list">
+                  {jobs.map((job) => (
+                    <button className={job.id === editingJobId ? 'active' : ''} key={job.id} onClick={() => selectJob(job)}>
+                      <span><strong>{job.name}</strong><small>{job.address || 'No address'}</small></span>
+                      <b>{job.entries.reduce((sum, entry) => sum + entry.quantity, 0)}</b>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <label>Job site name<input autoFocus value={newJobName} onChange={(event) => setNewJobName(event.target.value)} placeholder="e.g. Riverside Medical Center" /></label>
             <label>Address <small>Optional</small><input value={newJobAddress} onChange={(event) => setNewJobAddress(event.target.value)} placeholder="Street address or project number" /></label>
-            <div className="modal-actions"><button className="secondary-button" onClick={() => setShowJobModal(false)}>Cancel</button><button className="primary-button" onClick={createJob} disabled={!newJobName.trim()}>Create job</button></div>
+            <div className="storage-note">Saved automatically on this device and browser.</div>
+            <div className="modal-actions"><button className="secondary-button" onClick={() => setShowJobModal(false)}>Cancel</button><button className="primary-button" onClick={saveJob} disabled={!newJobName.trim()}>{editingJobId ? 'Save changes' : 'Create job'}</button></div>
           </div>
         </div>
       )}

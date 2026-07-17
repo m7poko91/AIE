@@ -39,6 +39,11 @@ export function parseContinuationQuantity(text: string): number | null {
   return quantities.reduce((total, match) => total + Number(match[1]), 0)
 }
 
+export function isRemoveLastCommand(text: string): boolean {
+  const command = text.trim().replace(/[.,!?]+$/, '')
+  return /^(?:please\s+)?(?:remove|delete|undo)(?:\s+the)?\s+(?:last|latest|previous)(?:\s+(?:line\s+item|item|entry|count|fixture))?(?:\s+please)?$/i.test(command)
+}
+
 function parseQuantityAndDimension(text: string) {
   const continuationQuantity = parseContinuationQuantity(text)
   if (continuationQuantity !== null) {

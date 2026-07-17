@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseContinuationQuantity, parseFixtureUtterance } from './parser'
+import { isRemoveLastCommand, parseContinuationQuantity, parseFixtureUtterance } from './parser'
 
 describe('parseFixtureUtterance', () => {
   it('parses LED troffers and office location', () => {
@@ -77,5 +77,12 @@ describe('parseFixtureUtterance', () => {
     expect(parseContinuationQuantity('1 more')).toBe(1)
     expect(parseContinuationQuantity('plus 2 more plus 1 more')).toBe(3)
     expect(parseContinuationQuantity('4 LED high bays')).toBeNull()
+  })
+
+  it('recognizes commands to remove the newest count', () => {
+    expect(isRemoveLastCommand('remove last line item')).toBe(true)
+    expect(isRemoveLastCommand('delete the previous entry')).toBe(true)
+    expect(isRemoveLastCommand('undo last count please.')).toBe(true)
+    expect(isRemoveLastCommand('remove 4 wall packs')).toBe(false)
   })
 })
